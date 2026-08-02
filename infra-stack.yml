@@ -1,0 +1,243 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Project (3) - IaC Enterprise Network Stack.
+  Creates a VPC spread over two Availability Zones with public and private
+  subnets, an Internet Gateway, two NAT Gateways (one per AZ) and route tables.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: UserManagement
+    Description: A name prefixed to every resource created by this stack.
+
+  Region:
+    Type: String
+    Default: eu-central-1
+    Description: AWS region to deploy into (AZ suffixes 'a'/'b' are appended to this).
+
+  VpcCIDR:
+    Type: String
+    Default: 10.0.0.0/22
+
+  PublicSubnetACIDR:
+    Type: String
+    Default: 10.0.0.0/24
+
+  PublicSubnetBCIDR:
+    Type: String
+    Default: 10.0.1.0/24
+
+  PrivateSubnetACIDR:
+    Type: String
+    Default: 10.0.2.0/24
+
+  PrivateSubnetBCIDR:
+    Type: String
+    Default: 10.0.3.0/24
+
+Resources:
+
+  # ---------- VPC ----------
+  UserManagementVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}Vpc'
+
+  # ---------- Internet Gateway ----------
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}IGW'
+
+  IgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref IGW
+      VpcId: !Ref UserManagementVpc
+
+  # ---------- Subnets ----------
+  PubSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref UserManagementVpc
+      AvailabilityZone: !Sub '${Region}a'
+      CidrBlock: !Ref PublicSubnetACIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PubSubnetA
+
+  PubSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref UserManagementVpc
+      AvailabilityZone: !Sub '${Region}b'
+      CidrBlock: !Ref PublicSubnetBCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PubSubnetB
+
+  PrivSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref UserManagementVpc
+      AvailabilityZone: !Sub '${Region}a'
+      CidrBlock: !Ref PrivateSubnetACIDR
+      Tags:
+        - Key: Name
+          Value: PrivSubnetA
+
+  PrivSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref UserManagementVpc
+      AvailabilityZone: !Sub '${Region}b'
+      CidrBlock: !Ref PrivateSubnetBCIDR
+      Tags:
+        - Key: Name
+          Value: PrivSubnetB
+
+  # ---------- Elastic IPs for NAT ----------
+  EIPa:
+    Type: AWS::EC2::EIP
+    DependsOn: IgwAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: EIPa
+
+  EIPb:
+    Type: AWS::EC2::EIP
+    DependsOn: IgwAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: EIPb
+
+  # ---------- NAT Gateways ----------
+  NATa:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIPa.AllocationId
+      SubnetId: !Ref PubSubnetA
+      Tags:
+        - Key: Name
+          Value: NATa
+
+  NATb:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt EIPb.AllocationId
+      SubnetId: !Ref PubSubnetB
+      Tags:
+        - Key: Name
+          Value: NATb
+
+  # ---------- Public route table (shared) ----------
+  MainRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref UserManagementVpc
+      Tags:
+        - Key: Name
+          Value: MainRT
+
+  MainRTRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttachment
+    Properties:
+      RouteTableId: !Ref MainRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+
+  MainRTSubnetAAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MainRT
+      SubnetId: !Ref PubSubnetA
+
+  MainRTSubnetBAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MainRT
+      SubnetId: !Ref PubSubnetB
+
+  # ---------- Private route table A (via NAT a) ----------
+  PrivateRTA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref UserManagementVpc
+      Tags:
+        - Key: Name
+          Value: PrivateRTA
+
+  PrivateRouteA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRTA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATa
+
+  PrivateRTASubnetAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRTA
+      SubnetId: !Ref PrivSubnetA
+
+  # ---------- Private route table B (via NAT b) ----------
+  PrivateRTB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref UserManagementVpc
+      Tags:
+        - Key: Name
+          Value: PrivateRTB
+
+  PrivateRouteB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRTB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATb
+
+  PrivateRTBSubnetAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRTB
+      SubnetId: !Ref PrivSubnetB
+
+Outputs:
+  VpcId:
+    Value: !Ref UserManagementVpc
+    Export:
+      Name: !Sub '${AWS::StackName}-VpcId'
+
+  PubSubnetA:
+    Value: !Ref PubSubnetA
+    Export:
+      Name: !Sub '${AWS::StackName}-PubSubnetA'
+
+  PubSubnetB:
+    Value: !Ref PubSubnetB
+    Export:
+      Name: !Sub '${AWS::StackName}-PubSubnetB'
+
+  PrivSubnetA:
+    Value: !Ref PrivSubnetA
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivSubnetA'
+
+  PrivSubnetB:
+    Value: !Ref PrivSubnetB
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivSubnetB'

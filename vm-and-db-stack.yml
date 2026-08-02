@@ -1,0 +1,306 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Project (3) - IaC Enterprise Compute/DB/LB Stack.
+  Consumes outputs from infra-stack.yml. Creates backend + client EC2
+  instances in two AZs, a Multi-AZ RDS MySQL database, and an
+  Application Load Balancer with two target groups.
+
+Parameters:
+  NetworkStackName:
+    Type: String
+    Description: Name of the already-deployed infra-stack (used to import its Outputs).
+    Default: infrastructure
+
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 KeyPair to SSH into instances.
+
+  DBPass:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Master password for the RDS instance (never hardcode this - pass at deploy time).
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+
+  Region:
+    Type: String
+    Default: eu-central-1
+
+Resources:
+
+  # ---------- Security Groups ----------
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow inbound HTTP to the ALB
+      VpcId:
+        Fn::ImportValue: !Sub '${NetworkStackName}-VpcId'
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      Tags:
+        - Key: Name
+          Value: LoadBalancerSecurityGroup
+
+  ServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Backend server security group
+      VpcId:
+        Fn::ImportValue: !Sub '${NetworkStackName}-VpcId'
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+        - SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+          IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      Tags:
+        - Key: Name
+          Value: ServerSecurityGroup
+
+  ClientSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Client-facing application security group
+      VpcId:
+        Fn::ImportValue: !Sub '${NetworkStackName}-VpcId'
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+        - SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+          IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      Tags:
+        - Key: Name
+          Value: ClientSecurityGroup
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: DB security group
+      VpcId:
+        Fn::ImportValue: !Sub '${NetworkStackName}-VpcId'
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !Ref ServerSecurityGroup
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      Tags:
+        - Key: Name
+          Value: DBSecurityGroup
+
+  # ---------- Backend (server) EC2s - private subnets ----------
+  ServerAEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: !Sub '${Region}a'
+      KeyName: !Ref KeyPairName
+      InstanceType: !Ref InstanceType
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: false
+          SubnetId:
+            Fn::ImportValue: !Sub '${NetworkStackName}-PrivSubnetA'
+          GroupSet:
+            - !Ref ServerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: ServerAEC2
+
+  ServerBEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: !Sub '${Region}b'
+      KeyName: !Ref KeyPairName
+      InstanceType: !Ref InstanceType
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: false
+          SubnetId:
+            Fn::ImportValue: !Sub '${NetworkStackName}-PrivSubnetB'
+          GroupSet:
+            - !Ref ServerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: ServerBEC2
+
+  # ---------- Client-facing EC2s - public subnets ----------
+  ClientAEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: !Sub '${Region}a'
+      KeyName: !Ref KeyPairName
+      InstanceType: !Ref InstanceType
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: true
+          SubnetId:
+            Fn::ImportValue: !Sub '${NetworkStackName}-PubSubnetA'
+          GroupSet:
+            - !Ref ClientSecurityGroup
+      Tags:
+        - Key: Name
+          Value: ClientAEC2
+
+  ClientBEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: !Sub '${Region}b'
+      KeyName: !Ref KeyPairName
+      InstanceType: !Ref InstanceType
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: true
+          SubnetId:
+            Fn::ImportValue: !Sub '${NetworkStackName}-PubSubnetB'
+          GroupSet:
+            - !Ref ClientSecurityGroup
+      Tags:
+        - Key: Name
+          Value: ClientBEC2
+
+  # ---------- Multi-AZ RDS ----------
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS MySQL instance
+      SubnetIds:
+        - Fn::ImportValue: !Sub '${NetworkStackName}-PrivSubnetA'
+        - Fn::ImportValue: !Sub '${NetworkStackName}-PrivSubnetB'
+
+  DB:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    Properties:
+      AllocatedStorage: 20
+      MaxAllocatedStorage: 1000
+      BackupRetentionPeriod: 1
+      CopyTagsToSnapshot: true
+      DBInstanceClass: db.t3.micro
+      DBInstanceIdentifier: usermanagerdb
+      DBName: UserManagerDB
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      Engine: mysql
+      EngineVersion: '8.0'
+      MasterUsername: admin
+      MasterUserPassword: !Ref DBPass
+      MultiAZ: true
+      PubliclyAccessible: false
+      StorageType: gp2
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+
+  # ---------- Target Groups ----------
+  ServerTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ServerTG
+      Port: 8080
+      Protocol: HTTP
+      TargetType: instance
+      VpcId:
+        Fn::ImportValue: !Sub '${NetworkStackName}-VpcId'
+      HealthCheckEnabled: true
+      HealthCheckPath: /users
+      HealthCheckProtocol: HTTP
+      Matcher:
+        HttpCode: '200'
+      Targets:
+        - Id: !Ref ServerAEC2
+          Port: 8080
+        - Id: !Ref ServerBEC2
+          Port: 8080
+
+  ClientTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ClientTG
+      Port: 5000
+      Protocol: HTTP
+      TargetType: instance
+      VpcId:
+        Fn::ImportValue: !Sub '${NetworkStackName}-VpcId'
+      HealthCheckEnabled: true
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      Matcher:
+        HttpCode: '200'
+      Targets:
+        - Id: !Ref ClientAEC2
+          Port: 5000
+        - Id: !Ref ClientBEC2
+          Port: 5000
+
+  # ---------- Load Balancer ----------
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: UserManagerLB
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+      Subnets:
+        - Fn::ImportValue: !Sub '${NetworkStackName}-PubSubnetA'
+        - Fn::ImportValue: !Sub '${NetworkStackName}-PubSubnetB'
+
+  LBServerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 8080
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ServerTG
+
+  LBClientListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 5000
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ClientTG
+
+Outputs:
+  LoadBalancerDNS:
+    Description: Public DNS name of the Application Load Balancer
+    Value: !GetAtt LoadBalancer.DNSName
+
+  DBEndpoint:
+    Description: RDS connection endpoint
+    Value: !GetAtt DB.Endpoint.Address
