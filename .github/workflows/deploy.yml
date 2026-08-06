@@ -1,9 +1,6 @@
 name: Deploy Enterprise Stacks
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
