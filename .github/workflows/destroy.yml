@@ -1,0 +1,29 @@
+name: Destroy Enterprise Stacks
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+concurrency:
+  group: aws-deployment
+  cancel-in-progress: true
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Make Script Executable
+        run: chmod +x destroy.sh
+
+      - name: Execute Cleanup Script
+        run: ./destroy.sh
