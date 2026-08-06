@@ -27,9 +27,9 @@ jobs:
       - name: Deploy Infrastructure Stack
         run: ./create-infra.sh
 
-      - name: Deploy Compute & DB Stack
+      - name: Deploy Compute and DB Stack
         env:
-          DB_PASSWORD: "YourSecurePassword123!" # Set your RDS password
+          DB_PASSWORD: "SuperSecretDBPass2026!"
         run: |
-          sed -i 's/KEY_PAIR_NAME="YourKeyPairName"/KEY_PAIR_NAME="my-ec2-key"/' create-vm-and-db.sh
+          sed -i 's/KEY_PAIR_NAME="YourKeyPairName"/KEY_PAIR_NAME="EC2Key"/' create-vm-and-db.sh
           ./create-vm-and-db.sh
