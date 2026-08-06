@@ -19,7 +19,7 @@ echo "=================================================="
 echo "Step 2: Force-clearing lingering resources in VPC..."
 echo "=================================================="
 
-# Get the VPC ID from the infrastructure stack if it exists
+# Retrieve the VPC ID output from the infrastructure stack
 VPC_ID=$(aws cloudformation describe-stacks \
   --stack-name "infrastructure" \
   --region "$REGION" \
@@ -27,9 +27,9 @@ VPC_ID=$(aws cloudformation describe-stacks \
   --output text 2>/dev/null || echo "")
 
 if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
-  echo "Found VPC: $VPC_ID. Cleaning up attached resources..."
+  echo "Found VPC ID: $VPC_ID. Cleaning up dependent resources..."
 
-  # 1. Terminate all running/stopped EC2 instances in this VPC
+  # Terminate all running, stopped, or pending EC2 instances attached to this VPC
   INSTANCE_IDS=$(aws ec2 describe-instances \
     --filters "Name=vpc-id,Values=$VPC_ID" "Name=instance-state-name,Values=running,stopped,stopping,pending" \
     --region "$REGION" \
@@ -37,13 +37,13 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
     --output text)
 
   if [ -n "$INSTANCE_IDS" ]; then
-    echo "Terminating lingering EC2 instances: $INSTANCE_IDS"
+    echo "Terminating instances: $INSTANCE_IDS"
     aws ec2 terminate-instances --instance-ids $INSTANCE_IDS --region "$REGION" > /dev/null
-    echo "Waiting for EC2 instances to terminate..."
+    echo "Waiting for instance termination..."
     aws ec2 wait instance-terminated --instance-ids $INSTANCE_IDS --region "$REGION"
   fi
 
-  # 2. Detach and delete lingering Network Interfaces (ENIs)
+  # Delete remaining unattached/available Network Interfaces (ENIs)
   ENI_IDS=$(aws ec2 describe-network-interfaces \
     --filters "Name=vpc-id,Values=$VPC_ID" \
     --region "$REGION" \
@@ -51,7 +51,7 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
     --output text)
 
   for eni in $ENI_IDS; do
-    echo "Deleting leftover ENI: $eni"
+    echo "Deleting ENI: $eni"
     aws ec2 delete-network-interface --network-interface-id "$eni" --region "$REGION" || true
   done
 fi
@@ -69,5 +69,5 @@ aws cloudformation wait stack-delete-complete \
   --region "$REGION"
 
 echo "=================================================="
-echo "SUCCESS: Everything destroyed automatically!"
+echo "SUCCESS: All compute instances and stacks destroyed!"
 echo "=================================================="
