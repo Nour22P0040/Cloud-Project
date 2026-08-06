@@ -1,7 +1,7 @@
 name: Destroy Enterprise Stacks
 
 on:
-  workflow_dispatch:  # Manual trigger only
+  workflow_dispatch:  # Manual trigger to prevent accidental deletion
 
 concurrency:
   group: aws-deployment
