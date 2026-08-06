@@ -3,6 +3,10 @@ name: Deploy Enterprise Stacks
 on:
   workflow_dispatch:
 
+concurrency:
+  group: aws-deployment
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -26,7 +30,7 @@ jobs:
 
       - name: Deploy Compute and DB Stack
         env:
-          DB_PASSWORD: "SuperSecretDBPass2026!"
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          sed -i 's/KEY_PAIR_NAME="YourKeyPairName"/KEY_PAIR_NAME="EC2Key"/' create-vm-and-db.sh
+          sed -i "s/KEY_PAIR_NAME=\"YourKeyPairName\"/KEY_PAIR_NAME=\"${{ secrets.EC2_KEY_PAIR_NAME }}\"/" create-vm-and-db.sh
           ./create-vm-and-db.sh
