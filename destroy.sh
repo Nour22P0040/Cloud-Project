@@ -116,13 +116,24 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
     aws ec2 delete-internet-gateway --internet-gateway-id "$igw" --region "$REGION" || true
   done
 
-  # 7. Delete Security Groups
+  # 7. Revoke rules first to break circular dependencies, then delete Security Groups
   SGS=$(aws ec2 describe-security-groups \
     --filters "Name=vpc-id,Values=$VPC_ID" \
     --region "$REGION" \
     --query "SecurityGroups[?GroupName!='default'].GroupId" \
     --output text)
 
+  # First pass: Strip all rules from security groups
+  for sg in $SGS; do
+    echo "Clearing rules for Security Group: $sg"
+    # Revoke ingress rules
+    aws ec2 revoke-security-group-ingress --group-id "$sg" --protocol all --port -1 --cidr 0.0.0.0/0 --region "$REGION" 2>/dev/null || true
+    
+    # Revoke egress rules
+    aws ec2 revoke-security-group-egress --group-id "$sg" --protocol all --port -1 --cidr 0.0.0.0/0 --region "$REGION" 2>/dev/null || true
+  done
+
+  # Second pass: Delete the unlinked security groups
   for sg in $SGS; do
     echo "Deleting Security Group: $sg"
     aws ec2 delete-security-group --group-id "$sg" --region "$REGION" || true
@@ -136,5 +147,5 @@ aws cloudformation wait stack-delete-complete --stack-name "vm-and-db" --region 
 aws cloudformation wait stack-delete-complete --stack-name "infrastructure" --region "$REGION" || true
 
 echo "=================================================="
-echo "SUCCESS: Cloud environment completely purged!"
+echo "SUCCESS: Cloud environment completely destroyed"
 echo "=================================================="
