@@ -303,3 +303,4 @@ Outputs:
   DBEndpoint:
     Description: RDS connection endpoint
     Value: !GetAtt DB.Endpoint.Address
+
