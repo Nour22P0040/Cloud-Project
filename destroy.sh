@@ -44,8 +44,8 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
 
   if [ -n "$INSTANCES" ]; then
     echo "Terminating EC2 instances: $INSTANCES"
-    aws ec2 terminate-instances --instance-ids $INSTANCES --region "$REGION" >/dev/null
-    aws ec2 wait instance-terminated --instance-ids $INSTANCES --region "$REGION"
+    aws ec2 terminate-instances --instance-ids "$INSTANCES" --region "$REGION" >/dev/null
+    aws ec2 wait instance-terminated --instance-ids "$INSTANCES" --region "$REGION"
   fi
 
   # 2. Delete Load Balancers
@@ -73,7 +73,7 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
 
   if [ -n "$NAT_GWS" ]; then
     echo "Waiting for NAT Gateways to reach deleted state..."
-    aws ec2 wait nat-gateway-deleted --nat-gateway-ids $NAT_GWS --region "$REGION" || true
+    aws ec2 wait nat-gateway-deleted --nat-gateway-ids "$NAT_GWS" --region "$REGION" || true
   fi
 
   # 4. Release EIPs AFTER NAT Gateways are deleted
