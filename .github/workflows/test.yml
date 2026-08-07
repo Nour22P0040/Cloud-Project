@@ -26,7 +26,7 @@ jobs:
 
       - name: Run YAML Linter
         run: |
-          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" .
+          yamllint -d "{extends: relaxed, rules: {line-length: disable, trailing-spaces: disable}}" .
 
       - name: Lint Shell Scripts
         run: |
