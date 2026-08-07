@@ -208,7 +208,6 @@ Resources:
       BackupRetentionPeriod: 1
       CopyTagsToSnapshot: true
       DBInstanceClass: db.t3.micro
-      DBInstanceIdentifier: usermanagerdb
       DBName: UserManagerDB
       DBSubnetGroupName: !Ref DBSubnetGroup
       Engine: mysql
