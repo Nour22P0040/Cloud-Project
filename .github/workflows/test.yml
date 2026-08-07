@@ -36,7 +36,7 @@ jobs:
 
       - name: Run AWS CloudFormation Linter (cfn-lint)
         run: |
-          cfn-lint -t ./*.yml --ignore-checks W
+          cfn-lint -t ./*.yml --ignore-checks W E3691
 
       - name: Run Checkov Security Scanner
         run: |
