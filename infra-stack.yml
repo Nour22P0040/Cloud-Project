@@ -241,4 +241,3 @@ Outputs:
     Value: !Ref PrivSubnetB
     Export:
       Name: !Sub '${AWS::StackName}-PrivSubnetB'
-      
