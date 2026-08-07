@@ -211,7 +211,7 @@ Resources:
       DBName: UserManagerDB
       DBSubnetGroupName: !Ref DBSubnetGroup
       Engine: mysql
-      EngineVersion: '8.0'
+      EngineVersion: '8.0.36'
       MasterUsername: admin
       MasterUserPassword: !Ref DBPass
       MultiAZ: true
