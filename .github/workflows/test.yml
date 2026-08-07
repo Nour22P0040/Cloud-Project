@@ -28,6 +28,11 @@ jobs:
         run: |
           yamllint -d "{extends: relaxed, rules: {line-length: disable}}" .
 
+      - name: Lint Shell Scripts
+        run: |
+          sudo apt-get install -y shellcheck
+          shellcheck *.sh
+
       - name: Run AWS CloudFormation Linter (cfn-lint)
         run: |
           cfn-lint -t *.yml *.yaml
